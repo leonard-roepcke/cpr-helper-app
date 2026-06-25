@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>CPR Helper</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>CPR Helper</h1>
+        <p class="subtitle">Metronom 110/min · Reanimationshilfe</p>
+      </header>
+
+      <section class="display" aria-live="polite">
+        <div class="phase" id="phase-label">Bereit</div>
+        <div class="counter" id="counter">—</div>
+        <div class="ratio-info" id="ratio-info">30 Kompressionen · 2 Beatmungen</div>
+      </section>
+
+      <section class="controls">
+        <button class="btn btn-primary" id="start-btn" type="button">Start</button>
+        <button class="btn btn-secondary" id="stop-btn" type="button" disabled>Stopp</button>
+      </section>
+
+      <section class="ratios" aria-label="Verhältnis Kompressionen zu Beatmungen">
+        <p class="section-label">Atmungsmodus</p>
+        <div class="ratio-buttons">
+          <button class="btn btn-ratio active" data-ratio="30:2" type="button">30:2</button>
+          <button class="btn btn-ratio" data-ratio="15:2" type="button">15:2</button>
+          <button class="btn btn-ratio" data-ratio="10:1" type="button">10:1</button>
+        </div>
+        <p class="hint" id="ratio-hint">Nach 30 Kompressionen: 5 s Pause für 2 Beatmungen</p>
+      </section>
+
+      <footer class="footer">
+        <span>110 BPM</span>
+        <span aria-hidden="true">·</span>
+        <span id="status">Gestoppt</span>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
