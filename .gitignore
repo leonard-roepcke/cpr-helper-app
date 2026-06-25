@@ -1,3 +1,15 @@
 node_modules
 dist
 .DS_Store
+
+# Android build artifacts
+android/local.properties
+android/.gradle
+android/build
+android/app/build
+android/cpr-helper.keystore
+*.keystore
+
+# Release binaries (attached to GitHub Releases)
+releases/*.apk
+releases/*.idsig

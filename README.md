@@ -26,3 +26,15 @@ npm run preview
 ```
 
 Die fertigen Dateien liegen in `dist/`.
+
+## Android APK
+
+Die fertige APK findest du unter [Releases](https://github.com/leonard-roepcke/cpr-helper-app/releases) zum direkten Download.
+
+**Installation:** APK herunterladen, ggf. „Installation aus unbekannten Quellen“ erlauben, dann installieren.
+
+**Selbst bauen** (Java 21 + Android SDK nötig):
+
+```bash
+npm run apk
+```

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CPR Helper</string>
+    <string name="title_activity_main">CPR Helper</string>
+    <string name="package_name">com.leonardroepcke.cprhelper</string>
+    <string name="custom_url_scheme">com.leonardroepcke.cprhelper</string>
+</resources>
