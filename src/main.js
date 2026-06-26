@@ -1,15 +1,17 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
   AGE_PROFILES,
-  announceNumber,
   getBreathPauseMs,
-  shouldSpeakCount,
+  getHighPitchFrequency,
+  isHighPitchCount,
+  TICK_FREQ,
 } from "./audio.js";
 
 const Volume = registerPlugin("Volume");
 
 const BPM = 110;
 const BEAT_MS = Math.round(60000 / BPM);
+const BREATH_FREQ = 880;
 
 const RATIOS = {
   standard: {
@@ -89,22 +91,30 @@ function initAudio() {
   if (audioCtx.state === "suspended") {
     audioCtx.resume();
   }
-  if ("speechSynthesis" in window) {
-    speechSynthesis.getVoices();
-  }
 }
 
-function playTick({ breath = false } = {}) {
+function playTick({ breath = false, count = 0, compressions = 0 } = {}) {
   if (!audioCtx || !masterGain) return;
+
+  let frequency = TICK_FREQ;
+  let volume = 0.35;
+
+  if (breath) {
+    frequency = BREATH_FREQ;
+    volume = 0.45;
+  } else if (count > 0 && isHighPitchCount(count, compressions)) {
+    frequency = getHighPitchFrequency(count, compressions);
+    volume = 0.4;
+  }
 
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
 
   osc.type = "sine";
-  osc.frequency.value = breath ? 880 : 660;
+  osc.frequency.value = frequency;
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(breath ? 0.45 : 0.35, now + 0.005);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
 
   osc.connect(gain);
@@ -215,8 +225,8 @@ function getCounterText() {
     return "♡";
   }
 
-  if (compressionCount === 0) {
-    return "—";
+  if (!running || compressionCount === 0) {
+    return running ? "1" : "—";
   }
 
   return String(compressionCount);
@@ -319,10 +329,8 @@ function onBeat() {
 
   compressionCount = nextCount;
 
-  if (shouldSpeakCount(nextCount, compressions)) {
-    announceNumber(nextCount, audioCtx, masterGain);
-  } else if (!isBreathBeat) {
-    playTick();
+  if (!isBreathBeat) {
+    playTick({ count: nextCount, compressions });
   }
 
   updateDisplay();
@@ -391,10 +399,6 @@ function stop() {
   breathStep = 0;
   nextBeatAt = 0;
   clearTimers();
-
-  if ("speechSynthesis" in window) {
-    speechSynthesis.cancel();
-  }
 
   startBtn.disabled = false;
   stopBtn.disabled = true;

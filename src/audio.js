@@ -1,5 +1,8 @@
-const SPOKEN_TAIL = 3;
+const HIGH_PITCH_TAIL = 3;
 const BREATH_INSPIRATORY_MS = 1000;
+
+const TICK_FREQ = 660;
+const HIGH_TICK_FREQS = [880, 990, 1100];
 
 const AGE_PROFILES = {
   adult: {
@@ -34,102 +37,15 @@ const AGE_PROFILES = {
   },
 };
 
-let speechSupported = null;
-const mp3Cache = new Map();
-const remoteMp3Base =
-  "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=de&q=";
-
-function canUseSpeechSynthesis() {
-  if (speechSupported !== null) return speechSupported;
-  speechSupported =
-    "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
-  return speechSupported;
+export function isHighPitchCount(count, totalCompressions) {
+  const highFrom = totalCompressions - HIGH_PITCH_TAIL + 1;
+  return count >= highFrom && count <= totalCompressions;
 }
 
-function localMp3Url(number) {
-  const base = import.meta.env.BASE_URL || "./";
-  return `${base}audio/de/${number}.mp3`;
-}
-
-function remoteMp3Url(number) {
-  return `${remoteMp3Base}${encodeURIComponent(String(number))}`;
-}
-
-async function fetchMp3(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`MP3 fetch failed: ${response.status}`);
-  }
-  return response.blob();
-}
-
-async function getNumberMp3Blob(number) {
-  if (mp3Cache.has(number)) {
-    return mp3Cache.get(number);
-  }
-
-  try {
-    const blob = await fetchMp3(localMp3Url(number));
-    mp3Cache.set(number, blob);
-    return blob;
-  } catch {
-    const blob = await fetchMp3(remoteMp3Url(number));
-    mp3Cache.set(number, blob);
-    return blob;
-  }
-}
-
-function speakWithTts(number) {
-  return new Promise((resolve, reject) => {
-    speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(String(number));
-    utterance.lang = "de-DE";
-    utterance.rate = 1.15;
-    utterance.pitch = 1;
-    utterance.onend = () => resolve();
-    utterance.onerror = () => reject(new Error("tts failed"));
-    speechSynthesis.speak(utterance);
-  });
-}
-
-async function speakWithMp3(number, audioCtx, masterGain) {
-  const blob = await getNumberMp3Blob(number);
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-  const source = audioCtx.createBufferSource();
-  const gain = audioCtx.createGain();
-  gain.gain.value = 0.9;
-  source.buffer = audioBuffer;
-  source.connect(gain);
-  gain.connect(masterGain);
-  source.start();
-  return new Promise((resolve) => {
-    source.onended = () => resolve();
-  });
-}
-
-export async function speakNumber(number, audioCtx, masterGain) {
-  if (canUseSpeechSynthesis()) {
-    try {
-      await speakWithTts(number);
-      return;
-    } catch {
-      // MP3 fallback below
-    }
-  }
-
-  if (audioCtx && masterGain) {
-    await speakWithMp3(number, audioCtx, masterGain);
-  }
-}
-
-export function announceNumber(number, audioCtx, masterGain) {
-  speakNumber(number, audioCtx, masterGain).catch(() => {});
-}
-
-export function shouldSpeakCount(count, totalCompressions) {
-  const spokenFrom = totalCompressions - SPOKEN_TAIL + 1;
-  return count >= spokenFrom && count <= totalCompressions;
+export function getHighPitchFrequency(count, totalCompressions) {
+  const highFrom = totalCompressions - HIGH_PITCH_TAIL + 1;
+  const index = count - highFrom;
+  return HIGH_TICK_FREQS[index] ?? HIGH_TICK_FREQS[HIGH_TICK_FREQS.length - 1];
 }
 
 export function getBreathPauseMs(profile, breaths) {
@@ -143,4 +59,4 @@ export function getBreathPauseMs(profile, breaths) {
   );
 }
 
-export { AGE_PROFILES, SPOKEN_TAIL, BREATH_INSPIRATORY_MS };
+export { AGE_PROFILES, TICK_FREQ, HIGH_PITCH_TAIL, BREATH_INSPIRATORY_MS };
