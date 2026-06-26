@@ -1,60 +1,29 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
-import {
-  advanceBeat,
-  BEAT_MS,
-  BREATH_FREQ,
-  buildCyclePlan,
-  formatAf,
-  getAgeButtonMeta,
-  getDisplayCounter,
-  getHighPitchFrequency,
-  getPhaseLabel,
-  RATIOS,
-  TICK_FREQ,
-} from "./engine.js";
 
 const Volume = registerPlugin("Volume");
 
-const RATIO_HINTS = {
-  standard: "Nur Metronom ohne Atmungspausen",
-  "30:2": "30 Kompressionen, Metronom läuft durch (Atemtöne im Takt)",
-  "15:2": "15 Kompressionen, Metronom läuft durch (Atemtöne im Takt)",
-  "10:1": "10 Kompressionen durchgehend, Beatmung im Takt",
-};
+const BPM = 110;
+const BEAT_MS = 60000 / BPM;
+const ACCENT_EVERY = 5;
 
-const RATIO_INFO = {
-  standard: "Nur Metronom · 110/min",
-  "30:2": "30 Kompressionen · 2 Beatmungen",
-  "15:2": "15 Kompressionen · 2 Beatmungen",
-  "10:1": "10 Kompressionen · 1 Beatmung",
-};
+const TICK_FREQ = 660;
+const ACCENT_FREQ = 880;
 
 const $ = (id) => document.getElementById(id);
 
 const phaseLabel = $("phase-label");
 const counter = $("counter");
-const ratioInfo = $("ratio-info");
-const ratioHint = $("ratio-hint");
 const status = $("status");
 const startBtn = $("start-btn");
 const stopBtn = $("stop-btn");
 const volumeBtn = $("volume-btn");
-const ratioButtons = document.querySelectorAll("[data-ratio]");
-const ageButtons = document.querySelectorAll("[data-age]");
 
 let audioCtx = null;
 let masterGain = null;
-let selectedRatio = "standard";
-let selectedAge = "adult";
 let running = false;
+let beatCount = 0;
 let beatTimer = null;
 let nextBeatAt = 0;
-let cycleState = { beatInCycle: 0 };
-let lastResult = null;
-
-function getPlan() {
-  return buildCyclePlan(selectedRatio, selectedAge);
-}
 
 function initAudio() {
   if (!audioCtx) {
@@ -68,7 +37,7 @@ function initAudio() {
   }
 }
 
-function playTone(frequency, volume = 0.35) {
+function playTick(accent = false) {
   if (!audioCtx || !masterGain) return;
 
   const now = audioCtx.currentTime;
@@ -76,31 +45,15 @@ function playTone(frequency, volume = 0.35) {
   const gain = audioCtx.createGain();
 
   osc.type = "sine";
-  osc.frequency.value = frequency;
+  osc.frequency.value = accent ? ACCENT_FREQ : TICK_FREQ;
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + 0.005);
+  gain.gain.exponentialRampToValueAtTime(accent ? 0.42 : 0.35, now + 0.005);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
 
   osc.connect(gain);
   gain.connect(masterGain);
   osc.start(now);
   osc.stop(now + 0.09);
-}
-
-function playBeatSound(result, plan) {
-  if (result.sound === "silent") return;
-
-  if (result.sound === "breath") {
-    playTone(BREATH_FREQ, 0.45);
-    return;
-  }
-
-  if (result.sound === "high") {
-    playTone(getHighPitchFrequency(result.compressionCount, plan.compressions), 0.4);
-    return;
-  }
-
-  playTone(TICK_FREQ, 0.35);
 }
 
 async function setMaxVolume() {
@@ -116,103 +69,31 @@ async function setMaxVolume() {
     }
   }
 
-  playTone(TICK_FREQ);
-}
-
-function updateAgeButtons() {
-  ageButtons.forEach((btn) => {
-    const meta = getAgeButtonMeta(btn.dataset.age, selectedRatio);
-    const title = btn.querySelector(".age-title");
-    const ageMeta = btn.querySelector(".age-meta");
-    if (title) title.textContent = meta.title;
-    if (ageMeta) ageMeta.textContent = meta.meta;
-  });
-
-  const ageHint = $("age-hint");
-  if (ageHint) {
-    ageHint.textContent = getAgeButtonMeta(selectedAge, selectedRatio).hint;
-  }
-}
-
-function updateRatioInfo() {
-  const plan = getPlan();
-  ratioInfo.textContent = RATIO_INFO[selectedRatio];
-  ratioHint.textContent = RATIO_HINTS[selectedRatio];
-
-  if (plan.type === "interleaved") {
-    ratioHint.textContent += ` · Zyklus ${plan.cycleBeats} Schläge (AF ${formatAf(plan.actualAf)}/min)`;
-  } else if (plan.type === "continuous") {
-    ratioHint.textContent += ` · AF ${formatAf(plan.actualAf)}/min`;
-  }
-
-  updateAgeButtons();
+  playTick();
 }
 
 function updateDisplay() {
-  phaseLabel.className = "phase";
-  counter.className = "counter";
-
-  if (!running || !lastResult) {
+  if (!running) {
     phaseLabel.textContent = "Bereit";
-    if (running) {
-      const plan = getPlan();
-      if (plan.type === "metronome") {
-        phaseLabel.textContent = "Metronom";
-        phaseLabel.classList.add("compressing");
-        counter.textContent = "♩";
-      } else {
-        phaseLabel.textContent = "Kompressionen";
-        phaseLabel.classList.add("compressing");
-        counter.textContent = "1";
-      }
-      status.textContent = "Läuft";
-    } else {
-      counter.textContent = "—";
-      status.textContent = "Gestoppt";
-    }
+    phaseLabel.className = "phase";
+    counter.textContent = "—";
+    counter.className = "counter";
+    status.textContent = "Gestoppt";
     return;
   }
 
-  const plan = getPlan();
-
-  if (lastResult.phase === "metronome") {
-    phaseLabel.textContent = "Metronom";
-    phaseLabel.classList.add("compressing");
-    counter.textContent = "♩";
-    status.textContent = "Läuft";
-    return;
-  }
-
-  if (lastResult.phase === "compressing") {
-    phaseLabel.textContent = getPhaseLabel(lastResult, plan);
-    phaseLabel.classList.add("compressing");
-    counter.textContent = getDisplayCounter(lastResult, running);
-    status.textContent = "Läuft";
-    return;
-  }
-
-  if (lastResult.phase === "breathing") {
-    phaseLabel.textContent = getPhaseLabel(lastResult, plan);
-    phaseLabel.classList.add("breathing");
-    counter.textContent = getDisplayCounter(lastResult, running);
-    counter.classList.add("breath-beat");
-    status.textContent = "Beatmen";
-  }
-}
-
-function clearBeatTimer() {
-  if (beatTimer) {
-    clearTimeout(beatTimer);
-    beatTimer = null;
-  }
+  phaseLabel.textContent = "Metronom";
+  phaseLabel.className = "phase active";
+  counter.textContent = beatCount > 0 ? String(beatCount) : "1";
+  counter.className = beatCount === ACCENT_EVERY ? "counter accent" : "counter";
+  status.textContent = "Läuft";
 }
 
 function onBeat() {
   if (!running) return;
 
-  const plan = getPlan();
-  lastResult = advanceBeat(cycleState, plan);
-  playBeatSound(lastResult, plan);
+  beatCount = beatCount >= ACCENT_EVERY ? 1 : beatCount + 1;
+  playTick(beatCount === ACCENT_EVERY);
   updateDisplay();
   scheduleNextBeat();
 }
@@ -230,33 +111,11 @@ function scheduleNextBeat() {
   beatTimer = setTimeout(onBeat, delay);
 }
 
-function setAge(ageKey) {
-  if (ageKey === selectedAge) return;
-  selectedAge = ageKey;
-
-  ageButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.age === ageKey);
-  });
-
-  updateRatioInfo();
-  updateDisplay();
-}
-
-function setRatio(ratioKey) {
-  if (ratioKey === selectedRatio) return;
-  selectedRatio = ratioKey;
-
-  ratioButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.ratio === ratioKey);
-  });
-
-  if (running) {
-    cycleState.beatInCycle = 0;
-    lastResult = null;
+function clearBeatTimer() {
+  if (beatTimer) {
+    clearTimeout(beatTimer);
+    beatTimer = null;
   }
-
-  updateRatioInfo();
-  updateDisplay();
 }
 
 function start() {
@@ -264,8 +123,7 @@ function start() {
   clearBeatTimer();
 
   running = true;
-  cycleState = { beatInCycle: 0 };
-  lastResult = null;
+  beatCount = 0;
   nextBeatAt = 0;
 
   startBtn.disabled = true;
@@ -277,8 +135,7 @@ function start() {
 
 function stop() {
   running = false;
-  cycleState = { beatInCycle: 0 };
-  lastResult = null;
+  beatCount = 0;
   nextBeatAt = 0;
   clearBeatTimer();
 
@@ -292,15 +149,4 @@ startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
 volumeBtn.addEventListener("click", setMaxVolume);
 
-ratioButtons.forEach((btn) => {
-  btn.addEventListener("click", () => setRatio(btn.dataset.ratio));
-});
-
-ageButtons.forEach((btn) => {
-  btn.addEventListener("click", () => setAge(btn.dataset.age));
-});
-
-setRatio("standard");
-setAge("adult");
-updateRatioInfo();
 updateDisplay();

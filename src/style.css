@@ -13,8 +13,7 @@
   --muted: #94a3b8;
   --accent: #22c55e;
   --accent-hover: #16a34a;
-  --danger: #ef4444;
-  --breath: #38bdf8;
+  --highlight: #38bdf8;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -32,6 +31,7 @@ body {
   justify-content: center;
   align-items: center;
   padding: 1rem;
+  padding-top: max(1rem, env(safe-area-inset-top));
   min-height: 100dvh;
 }
 
@@ -40,6 +40,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  padding-top: 2.5rem;
+}
+
+.header {
+  padding-top: 0.5rem;
 }
 
 .header h1 {
@@ -71,12 +76,8 @@ body {
   margin-bottom: 0.5rem;
 }
 
-.phase.compressing {
+.phase.active {
   color: var(--accent);
-}
-
-.phase.breathing {
-  color: var(--breath);
 }
 
 .counter {
@@ -87,12 +88,12 @@ body {
   transition: color 0.15s ease;
 }
 
-.counter.breath-beat {
-  color: var(--breath);
+.counter.accent {
+  color: var(--highlight);
 }
 
-.ratio-info {
-  margin-top: 0.75rem;
+.display-hint {
+  margin: 0.75rem 0 0;
   color: var(--muted);
   font-size: 0.9rem;
 }
@@ -144,7 +145,7 @@ body {
 .btn-volume {
   width: 100%;
   background: #1e3a5f;
-  color: var(--breath);
+  color: var(--highlight);
   border: 1px solid #2563eb;
   padding: 0.9rem 1.25rem;
   font-size: 1rem;
@@ -155,93 +156,11 @@ body {
   color: #fff;
 }
 
-.section-label {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
-.ratio-buttons {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
-}
-
-.btn-ratio {
-  background: var(--surface);
-  color: var(--text);
-  border: 2px solid var(--border);
-  padding: 0.85rem 0.5rem;
-  font-size: 1rem;
-}
-
-.btn-ratio:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-
-.btn-ratio.active {
-  border-color: var(--accent);
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--accent);
-}
-
-.hint {
-  margin: 0.75rem 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.age-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.btn-age {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.15rem;
-  background: var(--surface);
-  color: var(--text);
-  border: 2px solid var(--border);
-  padding: 0.75rem 0.9rem;
-  font-size: 1rem;
-  text-align: left;
-}
-
-.btn-age:hover:not(:disabled) {
-  border-color: var(--breath);
-}
-
-.btn-age.active {
-  border-color: var(--breath);
-  background: rgba(56, 189, 248, 0.1);
-}
-
-.age-title {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.age-meta {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.btn-age.active .age-title {
-  color: var(--breath);
-}
-
 .footer {
   display: flex;
   justify-content: center;
   gap: 0.5rem;
   color: var(--muted);
   font-size: 0.85rem;
+  padding-bottom: env(safe-area-inset-bottom);
 }
