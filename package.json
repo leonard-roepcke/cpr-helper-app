@@ -1,6 +1,6 @@
 {
   "name": "cpr-helper-app",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:android": "npm run build && npx cap sync android",
-    "apk": "npm run build:android && cd android && ./gradlew assembleRelease"
+    "apk:build": "npm run build:android && cd android && JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk} ./gradlew assembleRelease",
+    "apk": "npm run apk:build && bash scripts/sign-apk.sh releases/cpr-helper-v$(node -p \"require('./package.json').version\").apk",
+    "release": "bash scripts/release.sh"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",

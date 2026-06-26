@@ -130,10 +130,6 @@ function start() {
   initAudio();
   clearBeatTimer();
 
-  if (isNative) {
-    Session.start().catch(() => {});
-  }
-
   running = true;
   beatCount = 0;
   nextBeatAt = 0;
@@ -142,6 +138,12 @@ function start() {
   stopBtn.disabled = false;
 
   updateDisplay();
+
+  if (isNative) {
+    Session.start({ bpm: BPM, accentEvery: ACCENT_EVERY }).catch(() => {});
+    return;
+  }
+
   scheduleNextBeat();
 }
 
@@ -159,6 +161,14 @@ function stop() {
   stopBtn.disabled = true;
 
   updateDisplay();
+}
+
+if (isNative) {
+  Session.addListener("beat", ({ beatCount: count }) => {
+    if (!running) return;
+    beatCount = count;
+    updateDisplay();
+  });
 }
 
 startBtn.addEventListener("click", start);

@@ -1,0 +1,54 @@
+---
+description: Nach Änderungen Release bauen, signieren und zu GitHub pushen
+alwaysApply: true
+---
+
+# CPR Helper – Release & Push
+
+Nach **jeder abgeschlossenen funktionalen Änderung** in diesem Projekt:
+
+## 1. Version erhöhen
+
+- `package.json` → `"version"` (z. B. `1.7.0`)
+- `android/app/build.gradle` → `versionName` gleich setzen, `versionCode` um 1 erhöhen
+
+## 2. Signierte APK bauen
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+export ANDROID_HOME=$HOME/Android/Sdk
+npm run apk
+```
+
+Oder alles in einem Schritt:
+
+```bash
+bash scripts/release.sh "Kurze Release-Beschreibung auf Deutsch"
+```
+
+## 3. Nie unsignierte APKs veröffentlichen
+
+- Gradle erzeugt `app-release-unsigned.apk` – **nicht** direkt hochladen
+- Immer `scripts/sign-apk.sh` oder `npm run apk` verwenden
+- Vor Upload prüfen: `apksigner verify releases/cpr-helper-vX.Y.Z.apk`
+
+## 4. GitHub Release
+
+1. Alle Änderungen committen
+2. Tag `vX.Y.Z` setzen
+3. Signierte APK als `cpr-helper-vX.Y.Z.apk` an Release hängen
+4. `git push origin main` und `git push origin vX.Y.Z`
+
+## 5. Release-Notizen (Deutsch)
+
+Kurz die Nutzer-Änderungen beschreiben, plus Install-Hinweis:
+
+1. APK vom Release herunterladen
+2. Ggf. „Installation aus unbekannten Quellen“ erlauben
+3. Installieren (bestehende Version wird ersetzt)
+
+## Wichtig
+
+- Keystore: `android/cpr-helper.keystore` (lokal, nicht in Git)
+- Java 21 für Gradle (`JAVA_HOME=/usr/lib/jvm/java-21-openjdk`)
+- Android-Timing/Audio gehört nativ (`MetronomeScheduler`, `SessionPlugin`), nicht `setTimeout` im Hintergrund
