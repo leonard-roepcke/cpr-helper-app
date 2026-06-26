@@ -47,10 +47,29 @@ body {
   padding-top: 0.5rem;
 }
 
+.header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .header h1 {
   margin: 0;
   font-size: 1.75rem;
   font-weight: 700;
+}
+
+.timer {
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.timer.running {
+  color: var(--highlight);
 }
 
 .subtitle {

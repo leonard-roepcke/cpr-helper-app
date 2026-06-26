@@ -42,8 +42,8 @@ final class MetronomeScheduler {
                             return;
                         }
 
-                        beatCount = beatCount >= accentEvery ? 1 : beatCount + 1;
-                        boolean accent = beatCount == accentEvery;
+                        beatCount++;
+                        boolean accent = beatCount % accentEvery == 0;
                         listener.onBeat(beatCount, accent);
 
                         long beatMs = 60000L / bpm;
