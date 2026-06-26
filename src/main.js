@@ -1,6 +1,9 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
 const Volume = registerPlugin("Volume");
+const Session = registerPlugin("Session");
+
+const isNative = Capacitor.isNativePlatform();
 
 const BPM = 110;
 const BEAT_MS = 60000 / BPM;
@@ -38,6 +41,11 @@ function initAudio() {
 }
 
 function playTick(accent = false) {
+  if (isNative) {
+    Session.playTick({ accent }).catch(() => {});
+    return;
+  }
+
   if (!audioCtx || !masterGain) return;
 
   const now = audioCtx.currentTime;
@@ -122,6 +130,10 @@ function start() {
   initAudio();
   clearBeatTimer();
 
+  if (isNative) {
+    Session.start().catch(() => {});
+  }
+
   running = true;
   beatCount = 0;
   nextBeatAt = 0;
@@ -138,6 +150,10 @@ function stop() {
   beatCount = 0;
   nextBeatAt = 0;
   clearBeatTimer();
+
+  if (isNative) {
+    Session.stop().catch(() => {});
+  }
 
   startBtn.disabled = false;
   stopBtn.disabled = true;
