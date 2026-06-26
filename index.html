@@ -17,7 +17,7 @@
       <section class="display" aria-live="polite">
         <div class="phase" id="phase-label">Bereit</div>
         <div class="counter" id="counter">—</div>
-        <div class="ratio-info" id="ratio-info">30 Kompressionen · 2 Beatmungen</div>
+        <div class="ratio-info" id="ratio-info">Nur Metronom · 110/min</div>
       </section>
 
       <section class="controls">
@@ -25,14 +25,19 @@
         <button class="btn btn-secondary" id="stop-btn" type="button" disabled>Stopp</button>
       </section>
 
-      <section class="ratios" aria-label="Verhältnis Kompressionen zu Beatmungen">
-        <p class="section-label">Atmungsmodus</p>
+      <button class="btn btn-volume" id="volume-btn" type="button">
+        Lautstärke auf Maximum
+      </button>
+
+      <section class="ratios" aria-label="Atmungsmodus">
+        <p class="section-label">Modus</p>
         <div class="ratio-buttons">
-          <button class="btn btn-ratio active" data-ratio="30:2" type="button">30:2</button>
+          <button class="btn btn-ratio active" data-ratio="standard" type="button">Standard</button>
+          <button class="btn btn-ratio" data-ratio="30:2" type="button">30:2</button>
           <button class="btn btn-ratio" data-ratio="15:2" type="button">15:2</button>
           <button class="btn btn-ratio" data-ratio="10:1" type="button">10:1</button>
         </div>
-        <p class="hint" id="ratio-hint">Nach 30 Kompressionen: 5 s Pause für 2 Beatmungen</p>
+        <p class="hint" id="ratio-hint">Nur Metronom ohne Atmungspausen</p>
       </section>
 
       <footer class="footer">

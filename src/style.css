@@ -141,6 +141,20 @@ body {
   background: #273449;
 }
 
+.btn-volume {
+  width: 100%;
+  background: #1e3a5f;
+  color: var(--breath);
+  border: 1px solid #2563eb;
+  padding: 0.9rem 1.25rem;
+  font-size: 1rem;
+}
+
+.btn-volume:hover:not(:disabled) {
+  background: #1d4ed8;
+  color: #fff;
+}
+
 .section-label {
   margin: 0 0 0.5rem;
   font-size: 0.85rem;
@@ -152,7 +166,7 @@ body {
 
 .ratio-buttons {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
 }
 
