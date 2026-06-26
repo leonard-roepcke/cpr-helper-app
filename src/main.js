@@ -1,35 +1,25 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
-  AGE_PROFILES,
-  getBreathPauseMs,
+  advanceBeat,
+  BEAT_MS,
+  BREATH_FREQ,
+  buildCyclePlan,
+  formatAf,
+  getAgeButtonMeta,
+  getDisplayCounter,
   getHighPitchFrequency,
-  isHighPitchCount,
+  getPhaseLabel,
+  RATIOS,
   TICK_FREQ,
-} from "./audio.js";
+} from "./engine.js";
 
 const Volume = registerPlugin("Volume");
 
-const BPM = 110;
-const BEAT_MS = Math.round(60000 / BPM);
-const BREATH_FREQ = 880;
-
-const RATIOS = {
-  standard: {
-    compressions: Infinity,
-    breaths: 0,
-    pauseMetronome: false,
-    metronomeOnly: true,
-  },
-  "30:2": { compressions: 30, breaths: 2, pauseMetronome: true },
-  "15:2": { compressions: 15, breaths: 2, pauseMetronome: true },
-  "10:1": { compressions: 10, breaths: 1, pauseMetronome: false },
-};
-
 const RATIO_HINTS = {
   standard: "Nur Metronom ohne Atmungspausen",
-  "30:2": "Nach 30 Kompressionen: Pause für Beatmungen",
-  "15:2": "Nach 15 Kompressionen: Pause für Beatmungen",
-  "10:1": "Nach 10 Kompressionen: Beatmung bei laufendem Metronom",
+  "30:2": "30 Kompressionen, Metronom läuft durch (Atemtöne im Takt)",
+  "15:2": "15 Kompressionen, Metronom läuft durch (Atemtöne im Takt)",
+  "10:1": "10 Kompressionen durchgehend, Beatmung im Takt",
 };
 
 const RATIO_INFO = {
@@ -57,28 +47,13 @@ let masterGain = null;
 let selectedRatio = "standard";
 let selectedAge = "adult";
 let running = false;
-let phase = "idle";
-let compressionCount = 0;
-let breathStep = 0;
 let beatTimer = null;
-let breathTimer = null;
-let breathCueTimers = [];
 let nextBeatAt = 0;
+let cycleState = { beatInCycle: 0 };
+let lastResult = null;
 
-function getRatio() {
-  return RATIOS[selectedRatio];
-}
-
-function getAgeProfile() {
-  return AGE_PROFILES[selectedAge];
-}
-
-function isMetronomeOnly() {
-  return Boolean(getRatio().metronomeOnly);
-}
-
-function getBreathsForCycle() {
-  return getRatio().breaths || getAgeProfile().breaths;
+function getPlan() {
+  return buildCyclePlan(selectedRatio, selectedAge);
 }
 
 function initAudio() {
@@ -93,19 +68,8 @@ function initAudio() {
   }
 }
 
-function playTick({ breath = false, count = 0, compressions = 0 } = {}) {
+function playTone(frequency, volume = 0.35) {
   if (!audioCtx || !masterGain) return;
-
-  let frequency = TICK_FREQ;
-  let volume = 0.35;
-
-  if (breath) {
-    frequency = BREATH_FREQ;
-    volume = 0.45;
-  } else if (count > 0 && isHighPitchCount(count, compressions)) {
-    frequency = getHighPitchFrequency(count, compressions);
-    volume = 0.4;
-  }
 
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -123,9 +87,20 @@ function playTick({ breath = false, count = 0, compressions = 0 } = {}) {
   osc.stop(now + 0.09);
 }
 
-function clearBreathCueTimers() {
-  breathCueTimers.forEach((timer) => clearTimeout(timer));
-  breathCueTimers = [];
+function playBeatSound(result, plan) {
+  if (result.sound === "silent") return;
+
+  if (result.sound === "breath") {
+    playTone(BREATH_FREQ, 0.45);
+    return;
+  }
+
+  if (result.sound === "high") {
+    playTone(getHighPitchFrequency(result.compressionCount, plan.compressions), 0.4);
+    return;
+  }
+
+  playTone(TICK_FREQ, 0.35);
 }
 
 async function setMaxVolume() {
@@ -137,28 +112,122 @@ async function setMaxVolume() {
       await Volume.setMax();
       return;
     } catch {
-      // Web Audio fallback below
+      // fallback
     }
   }
 
-  playTick();
+  playTone(TICK_FREQ);
 }
 
-function updateAgeHint() {
-  const profile = getAgeProfile();
+function updateAgeButtons() {
+  ageButtons.forEach((btn) => {
+    const meta = getAgeButtonMeta(btn.dataset.age, selectedRatio);
+    const title = btn.querySelector(".age-title");
+    const ageMeta = btn.querySelector(".age-meta");
+    if (title) title.textContent = meta.title;
+    if (ageMeta) ageMeta.textContent = meta.meta;
+  });
+
   const ageHint = $("age-hint");
   if (ageHint) {
-    ageHint.textContent = `${profile.range} · AF ${profile.af}/min · ${profile.ratioHint}`;
+    ageHint.textContent = getAgeButtonMeta(selectedAge, selectedRatio).hint;
   }
 }
 
-function finishBreathPhase() {
-  compressionCount = 0;
-  breathStep = 0;
-  phase = "compressing";
+function updateRatioInfo() {
+  const plan = getPlan();
+  ratioInfo.textContent = RATIO_INFO[selectedRatio];
+  ratioHint.textContent = RATIO_HINTS[selectedRatio];
+
+  if (plan.type === "interleaved") {
+    ratioHint.textContent += ` · Zyklus ${plan.cycleBeats} Schläge (AF ${formatAf(plan.actualAf)}/min)`;
+  } else if (plan.type === "continuous") {
+    ratioHint.textContent += ` · AF ${formatAf(plan.actualAf)}/min`;
+  }
+
+  updateAgeButtons();
+}
+
+function updateDisplay() {
+  phaseLabel.className = "phase";
   counter.className = "counter";
+
+  if (!running || !lastResult) {
+    phaseLabel.textContent = "Bereit";
+    if (running) {
+      const plan = getPlan();
+      if (plan.type === "metronome") {
+        phaseLabel.textContent = "Metronom";
+        phaseLabel.classList.add("compressing");
+        counter.textContent = "♩";
+      } else {
+        phaseLabel.textContent = "Kompressionen";
+        phaseLabel.classList.add("compressing");
+        counter.textContent = "1";
+      }
+      status.textContent = "Läuft";
+    } else {
+      counter.textContent = "—";
+      status.textContent = "Gestoppt";
+    }
+    return;
+  }
+
+  const plan = getPlan();
+
+  if (lastResult.phase === "metronome") {
+    phaseLabel.textContent = "Metronom";
+    phaseLabel.classList.add("compressing");
+    counter.textContent = "♩";
+    status.textContent = "Läuft";
+    return;
+  }
+
+  if (lastResult.phase === "compressing") {
+    phaseLabel.textContent = getPhaseLabel(lastResult, plan);
+    phaseLabel.classList.add("compressing");
+    counter.textContent = getDisplayCounter(lastResult, running);
+    status.textContent = "Läuft";
+    return;
+  }
+
+  if (lastResult.phase === "breathing") {
+    phaseLabel.textContent = getPhaseLabel(lastResult, plan);
+    phaseLabel.classList.add("breathing");
+    counter.textContent = getDisplayCounter(lastResult, running);
+    counter.classList.add("breath-beat");
+    status.textContent = "Beatmen";
+  }
+}
+
+function clearBeatTimer() {
+  if (beatTimer) {
+    clearTimeout(beatTimer);
+    beatTimer = null;
+  }
+}
+
+function onBeat() {
+  if (!running) return;
+
+  const plan = getPlan();
+  lastResult = advanceBeat(cycleState, plan);
+  playBeatSound(lastResult, plan);
   updateDisplay();
   scheduleNextBeat();
+}
+
+function scheduleNextBeat() {
+  if (!running) return;
+
+  const now = performance.now();
+  if (!nextBeatAt) {
+    nextBeatAt = now;
+  }
+  nextBeatAt += BEAT_MS;
+
+  const delay = Math.max(0, nextBeatAt - performance.now());
+  beatTimer = setTimeout(onBeat, delay);
 }
 
 function setAge(ageKey) {
@@ -169,220 +238,34 @@ function setAge(ageKey) {
     btn.classList.toggle("active", btn.dataset.age === ageKey);
   });
 
-  updateAgeHint();
-
-  if (!running || phase !== "breathing") return;
-
-  clearBreathCueTimers();
-  if (breathTimer) {
-    clearTimeout(breathTimer);
-    breathTimer = null;
-  }
-  scheduleBreathPhase();
+  updateRatioInfo();
+  updateDisplay();
 }
 
 function setRatio(ratioKey) {
   if (ratioKey === selectedRatio) return;
-
-  const wasRunning = running;
-  const wasBreathing = phase === "breathing";
-
   selectedRatio = ratioKey;
 
   ratioButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.ratio === ratioKey);
   });
 
-  ratioInfo.textContent = RATIO_INFO[ratioKey];
-  ratioHint.textContent = RATIO_HINTS[ratioKey];
-
-  if (!wasRunning) return;
-
-  clearTimers();
-
-  if (wasBreathing && getRatio().pauseMetronome) {
-    scheduleBreathPhase();
-    return;
+  if (running) {
+    cycleState.beatInCycle = 0;
+    lastResult = null;
   }
 
-  phase = "compressing";
-  compressionCount = 0;
-  breathStep = 0;
-  nextBeatAt = performance.now();
-  scheduleNextBeat();
+  updateRatioInfo();
   updateDisplay();
-}
-
-function getCounterText() {
-  if (isMetronomeOnly()) {
-    return running ? "♩" : "—";
-  }
-
-  if (phase === "breathing") {
-    if (compressionCount > 0) {
-      return String(compressionCount);
-    }
-    return "♡";
-  }
-
-  if (!running || compressionCount === 0) {
-    return running ? "1" : "—";
-  }
-
-  return String(compressionCount);
-}
-
-function updateDisplay() {
-  const breaths = getBreathsForCycle();
-  const { pauseMetronome } = getRatio();
-
-  phaseLabel.className = "phase";
-  counter.className = "counter";
-
-  if (!running) {
-    phaseLabel.textContent = "Bereit";
-    counter.textContent = "—";
-    status.textContent = "Gestoppt";
-    return;
-  }
-
-  if (isMetronomeOnly()) {
-    phaseLabel.textContent = "Metronom";
-    phaseLabel.classList.add("compressing");
-    counter.textContent = "♩";
-    status.textContent = "Läuft";
-    return;
-  }
-
-  if (phase === "compressing") {
-    phaseLabel.textContent = "Kompressionen";
-    phaseLabel.classList.add("compressing");
-    counter.textContent = getCounterText();
-    status.textContent = "Läuft";
-    return;
-  }
-
-  if (phase === "breathing") {
-    phaseLabel.textContent =
-      breathStep > 0 ? `Beatmen ${breathStep}/${breaths}` : `${breaths}× Beatmen`;
-    phaseLabel.classList.add("breathing");
-    counter.textContent = getCounterText();
-    counter.classList.add("breath-beat");
-    status.textContent = pauseMetronome ? "Beatmen" : "Läuft";
-  }
-}
-
-function clearTimers() {
-  if (beatTimer) {
-    clearTimeout(beatTimer);
-    beatTimer = null;
-  }
-  if (breathTimer) {
-    clearTimeout(breathTimer);
-    breathTimer = null;
-  }
-  clearBreathCueTimers();
-}
-
-function scheduleBreathPhase() {
-  const { pauseMetronome } = getRatio();
-  const profile = getAgeProfile();
-  const breaths = getBreathsForCycle();
-
-  if (!pauseMetronome) {
-    return;
-  }
-
-  phase = "breathing";
-  breathStep = 1;
-  updateDisplay();
-
-  playTick({ breath: true });
-
-  if (breaths >= 2) {
-    const timer = setTimeout(() => {
-      playTick({ breath: true });
-      breathStep = 2;
-      updateDisplay();
-    }, profile.breathGapMs);
-    breathCueTimers.push(timer);
-  }
-
-  breathTimer = setTimeout(() => {
-    breathTimer = null;
-    clearBreathCueTimers();
-    finishBreathPhase();
-  }, getBreathPauseMs(profile, breaths));
-}
-
-function onBeat() {
-  const { compressions, pauseMetronome } = getRatio();
-  const profile = getAgeProfile();
-  const nextCount = compressionCount + 1;
-  const isBreathBeat = !pauseMetronome && nextCount >= compressions;
-
-  if (isMetronomeOnly()) {
-    playTick();
-    scheduleNextBeat();
-    return;
-  }
-
-  compressionCount = nextCount;
-
-  if (!isBreathBeat) {
-    playTick({ count: nextCount, compressions });
-  }
-
-  updateDisplay();
-
-  if (isBreathBeat) {
-    playTick({ breath: true });
-    phase = "breathing";
-    breathStep = 1;
-    phaseLabel.textContent = "Beatmung";
-    phaseLabel.className = "phase breathing";
-    counter.className = "counter breath-beat";
-    updateDisplay();
-
-    breathTimer = setTimeout(() => {
-      if (!running) return;
-      finishBreathPhase();
-    }, getBreathPauseMs(profile, 1));
-    return;
-  }
-
-  if (compressionCount >= compressions) {
-    scheduleBreathPhase();
-    return;
-  }
-
-  scheduleNextBeat();
-}
-
-function scheduleNextBeat() {
-  if (!running || phase !== "compressing") return;
-
-  const now = performance.now();
-  if (!nextBeatAt) {
-    nextBeatAt = now;
-  }
-  nextBeatAt += BEAT_MS;
-
-  const delay = Math.max(0, nextBeatAt - performance.now());
-  beatTimer = setTimeout(() => {
-    if (!running || phase !== "compressing") return;
-    onBeat();
-  }, delay);
 }
 
 function start() {
   initAudio();
-  clearTimers();
+  clearBeatTimer();
 
   running = true;
-  phase = "compressing";
-  compressionCount = 0;
-  breathStep = 0;
+  cycleState = { beatInCycle: 0 };
+  lastResult = null;
   nextBeatAt = 0;
 
   startBtn.disabled = true;
@@ -394,11 +277,10 @@ function start() {
 
 function stop() {
   running = false;
-  phase = "idle";
-  compressionCount = 0;
-  breathStep = 0;
+  cycleState = { beatInCycle: 0 };
+  lastResult = null;
   nextBeatAt = 0;
-  clearTimers();
+  clearBeatTimer();
 
   startBtn.disabled = false;
   stopBtn.disabled = true;
@@ -420,4 +302,5 @@ ageButtons.forEach((btn) => {
 
 setRatio("standard");
 setAge("adult");
+updateRatioInfo();
 updateDisplay();
